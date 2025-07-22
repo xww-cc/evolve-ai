@@ -5,7 +5,11 @@ aiohttp
 ray
 matplotlib
 pytest
+pytest-asyncio
+pytest-html
+coverage
 python-dotenv
 requests
 urllib3
 pandas
+psutil

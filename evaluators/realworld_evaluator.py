@@ -50,6 +50,54 @@ class RealWorldEvaluator:
             logger.warning(f"真实世界评估失败: {e}")
             return 0.0
     
+    async def evaluate_model_real_world(self, model_state: Dict, device: str, level: int) -> List[float]:
+        """评估模型在真实世界任务中的表现 - 兼容nsga2调用"""
+        try:
+            # 从状态重建模型
+            model = ModularMathReasoningNet(
+                model_state['modules_config'], 
+                model_state['epigenetic_markers']
+            ).to(device)
+            model.load_state(model_state)
+            
+            # 执行评估
+            score = await self._quick_evaluation(model)
+            
+            # 返回多目标评估结果 [主要得分, 多样性得分]
+            diversity_score = self._calculate_diversity_score(model)
+            
+            return [score, diversity_score]
+            
+        except Exception as e:
+            logger.warning(f"真实世界模型评估失败: {e}")
+            return [-float('inf'), -float('inf')]
+    
+    def _calculate_diversity_score(self, model: ModularMathReasoningNet) -> float:
+        """计算多样性得分"""
+        try:
+            # 基于模块配置的多样性
+            config_str = str(model.modules_config)
+            unique_modules = len(set(config_str.split(',')))
+            
+            # 基于参数数量的多样性
+            total_params = sum(p.numel() for p in model.parameters())
+            
+            # 基于输出维度的多样性
+            test_input = torch.randn(1, 4)
+            output = model(test_input)
+            output_diversity = output.shape[1] if len(output.shape) > 1 else 1
+            
+            # 综合多样性得分
+            diversity_score = (unique_modules / 10.0 + 
+                             min(total_params / 1000.0, 1.0) + 
+                             min(output_diversity / 10.0, 1.0)) / 3.0
+            
+            return min(1.0, diversity_score)
+            
+        except Exception as e:
+            logger.warning(f"多样性计算失败: {e}")
+            return 0.1
+    
     async def _quick_evaluation(self, model: ModularMathReasoningNet) -> float:
         """快速评估：基础能力测试"""
         try:

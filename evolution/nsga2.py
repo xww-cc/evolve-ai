@@ -252,7 +252,7 @@ async def evolve_population_nsga2(population: List[ModularMathReasoningNet], num
 
     return population, history_avg_score, history_best_score
 
-def evolve_population_nsga2(population: List[ModularMathReasoningNet], 
+def evolve_population_nsga2_simple(population: List[ModularMathReasoningNet], 
                            fitness_scores: List[Tuple[float, float]], 
                            mutation_rate: float = 0.8,  # 增加变异率
                            crossover_rate: float = 0.8,  # 增加交叉率

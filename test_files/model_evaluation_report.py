@@ -150,7 +150,7 @@ class ModelEvaluationReport:
                              (0.8, 0.8), (0.9, 0.6)]
             
             start_time = time.time()
-            evolved_population = evolve_population_nsga2(population, fitness_scores)
+            evolved_population, _, _ = await evolve_population_nsga2(population, 3, 0)
             evolution_time = time.time() - start_time
             evolution_times.append(evolution_time)
             
@@ -189,7 +189,7 @@ class ModelEvaluationReport:
             initial_diversity = self._calculate_diversity(population)
             
             fitness_scores = [(0.8, 0.6)] * len(population)
-            evolved_population = evolve_population_nsga2(population, fitness_scores)
+            evolved_population, _, _ = await evolve_population_nsga2(population, 3, 0)
             final_diversity = self._calculate_diversity(evolved_population)
             
             diversity_metrics.append({
@@ -228,7 +228,7 @@ class ModelEvaluationReport:
                     realworld_score = await realworld_evaluator.evaluate(individual)
                     fitness_scores.append((symbolic_score, realworld_score))
                     
-                evolved_population = evolve_population_nsga2(population, fitness_scores)
+                evolved_population, _, _ = await evolve_population_nsga2(population, 3, 0)
                 
                 total_time = time.time() - start_time
                 stability_results.append({
