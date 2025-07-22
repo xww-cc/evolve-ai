@@ -1,0 +1,177 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run system tests
+      run: |
+        python system_test.py
+    
+    - name: Run performance tests
+      run: |
+        python performance_monitor.py
+    
+    - name: Run status check
+      run: |
+        python system_status.py
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+    
+    - name: Run security scan
+      run: |
+        bandit -r . -f json -o bandit-report.json || true
+        safety check --json --output safety-report.json || true
+    
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          safety-report.json
+
+  documentation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Generate documentation
+      run: |
+        python -c "
+        import os
+        print('Documentation files:')
+        for root, dirs, files in os.walk('.'):
+            for file in files:
+                if file.endswith('.md') or file.endswith('.py'):
+                    print(f'  {os.path.join(root, file)}')
+        "
+    
+    - name: Check documentation completeness
+      run: |
+        echo "Checking documentation files..."
+        ls -la *.md
+        echo "Checking code documentation..."
+        python -c "
+        import ast
+        import os
+        
+        def check_docstrings(file_path):
+            with open(file_path, 'r') as f:
+                try:
+                    tree = ast.parse(f.read())
+                    for node in ast.walk(tree):
+                        if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.Module)):
+                            if not ast.get_docstring(node):
+                                print(f'  Missing docstring in {file_path}: {node.name if hasattr(node, \"name\") else \"module\"}')
+                except:
+                    pass
+        
+        for root, dirs, files in os.walk('.'):
+            for file in files:
+                if file.endswith('.py') and not file.startswith('.'):
+                    check_docstrings(os.path.join(root, file))
+        "
+
+  release:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run full evaluation
+      run: |
+        python model_evaluation_report.py
+    
+    - name: Generate release artifacts
+      run: |
+        echo "Creating release artifacts..."
+        mkdir -p release
+        cp README.md release/
+        cp requirements.txt release/
+        cp -r config release/
+        cp -r evolution release/
+        cp -r evaluators release/
+        cp -r models release/
+        cp -r optimizers release/
+        cp -r utils release/
+        cp main.py release/
+        cp system_test.py release/
+        
+        echo "Release artifacts created in release/ directory"
+    
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-artifacts
+        path: release/ 
