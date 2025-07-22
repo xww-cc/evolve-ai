@@ -154,7 +154,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
-*.swo
+*.swp
 *~
 
 # OS generated files
