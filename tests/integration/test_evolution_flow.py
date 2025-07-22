@@ -8,7 +8,7 @@ import pytest
 import asyncio
 import time
 from evolution.population import create_initial_population
-from evolution.nsga2 import evolve_population_nsga2
+from evolution.nsga2 import evolve_population_nsga2_simple
 from evaluators.symbolic_evaluator import SymbolicEvaluator
 from evaluators.realworld_evaluator import RealWorldEvaluator
 from config.logging_setup import setup_logging
@@ -139,7 +139,7 @@ class TestEvolutionFlow:
             logger.info(f"第 {generation+1} 代，平均适应度: {avg_fitness:.3f}, 停滞: {is_stagnant}")
             
             # 进化
-            population = evolve_population_nsga2(population, fitness_scores)
+            population = evolve_population_nsga2_simple(population, fitness_scores)
         
         # 验证停滞检测功能
         assert len(history_scores) > 0
@@ -186,7 +186,7 @@ class TestEvolutionFlow:
                 fitness_scores.append((symbolic_score, realworld_score))
             
             # 进化
-            population = evolve_population_nsga2(population, fitness_scores)
+            population = evolve_population_nsga2_simple(population, fitness_scores)
             
             gen_time = time.time() - gen_start
             logger.info(f"第 {generation+1} 代耗时: {gen_time:.3f}秒")

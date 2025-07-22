@@ -92,13 +92,45 @@ class TestEpigeneticModule:
     
     def test_epigenetic_initialization(self):
         """测试表观遗传模块初始化"""
-        # 跳过这个测试，因为EpigeneticModule不存在
-        pytest.skip("EpigeneticModule类不存在")
+        from models.epigenetic import EpigeneticMarkers
+        
+        markers = EpigeneticMarkers()
+        assert isinstance(markers, EpigeneticMarkers)
+        assert len(markers) == 2
+        assert markers.shape == (2,)
+        
+        # 测试克隆功能
+        cloned_markers = markers.clone()
+        assert isinstance(cloned_markers, EpigeneticMarkers)
+        assert len(cloned_markers) == 2
         
     def test_epigenetic_forward(self):
         """测试表观遗传模块前向传播"""
-        # 跳过这个测试，因为EpigeneticModule不存在
-        pytest.skip("EpigeneticModule类不存在")
+        from models.epigenetic import EpigeneticMarkers
+        
+        markers = EpigeneticMarkers()
+        
+        # 测试基本操作
+        assert len(markers) == 2
+        assert markers.shape == (2,)
+        
+        # 测试索引访问
+        value = markers[0]
+        assert isinstance(value, torch.Tensor)
+        
+        # 测试设置值
+        markers[0] = 0.5
+        assert markers[0].item() == 0.5
+        
+        # 测试加法操作
+        original_data = markers.data.clone()
+        markers += 0.1
+        assert torch.allclose(markers.data, original_data + 0.1)
+        
+        # 测试clamp操作
+        markers.clamp()
+        assert torch.all(markers.data >= -1.0)
+        assert torch.all(markers.data <= 1.0)
 
 
 if __name__ == "__main__":

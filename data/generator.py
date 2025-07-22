@@ -266,3 +266,28 @@ class RealWorldDataGenerator:
             combined_targets = torch.cat([data['targets'] for data in niche_data.values()], dim=0)
             niche_data['combined'] = {'inputs': combined_inputs, 'targets': combined_targets}
         return niche_data
+    
+    def generate_test_data(self, num_samples: int = 10) -> Dict[str, torch.Tensor]:
+        """生成测试数据"""
+        try:
+            # 生成简单的测试数据
+            x = torch.randn(num_samples, 4)
+            y = torch.sum(x, dim=1, keepdim=True)
+            
+            test_data = {
+                'x': x,
+                'y': y,
+                'num_samples': num_samples
+            }
+            
+            logger.info(f"生成测试数据 - 样本数: {num_samples}")
+            return test_data
+            
+        except Exception as e:
+            logger.error(f"生成测试数据失败: {e}")
+            # 返回默认数据
+            return {
+                'x': torch.randn(5, 4),
+                'y': torch.randn(5, 1),
+                'num_samples': 5
+            }

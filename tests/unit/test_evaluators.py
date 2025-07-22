@@ -111,14 +111,29 @@ class TestRealWorldEvaluator:
     @pytest.mark.asyncio
     async def test_task_generation(self, evaluator):
         """测试任务生成"""
-        # 跳过这个测试，因为方法不存在
-        pytest.skip("_generate_tasks方法不存在")
+        tasks = await evaluator._generate_tasks()
+        assert isinstance(tasks, list)
+        assert len(tasks) > 0
+        
+        for task in tasks:
+            assert 'type' in task
+            assert 'description' in task
+            assert 'difficulty' in task
+            assert isinstance(task['difficulty'], float)
+            assert 0 <= task['difficulty'] <= 1
         
     @pytest.mark.asyncio
     async def test_task_solving(self, evaluator, simple_model):
         """测试任务解决"""
-        # 跳过这个测试，因为方法不存在
-        pytest.skip("_solve_task方法不存在")
+        # 生成任务
+        tasks = await evaluator._generate_tasks()
+        assert len(tasks) > 0
+        
+        # 测试解决任务
+        for task in tasks:
+            score = await evaluator._solve_task(simple_model, task)
+            assert isinstance(score, float)
+            assert 0 <= score <= 1
 
 
 class TestEvaluatorIntegration:

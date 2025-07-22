@@ -8,7 +8,7 @@ import pytest
 import torch
 import numpy as np
 from models.modular_net import ModularMathReasoningNet
-from evolution.nsga2 import evolve_population_nsga2, _fast_non_dominated_sort
+from evolution.nsga2 import evolve_population_nsga2_simple, _fast_non_dominated_sort
 from evolution.population import create_initial_population
 
 
@@ -46,7 +46,7 @@ class TestNSGA2:
             realworld_score = 0.7
             fitness_scores.append((symbolic_score, realworld_score))
         
-                # 执行进化
+        # 执行进化
         evolved_population = evolve_population_nsga2_simple(
             population,
             fitness_scores,
@@ -154,13 +154,28 @@ class TestStagnationDetection:
     
     def test_stagnation_detection(self):
         """测试停滞检测功能"""
-        # 跳过这个测试，因为StagnationDetector不存在
-        pytest.skip("StagnationDetector类不存在")
+        from evolution.stagnation_detector import detect_stagnation
+        
+        # 测试没有停滞的情况
+        history_avg_scores = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        stagnation = detect_stagnation(history_avg_scores)
+        assert isinstance(stagnation, (bool, np.bool_))  # 允许numpy布尔类型
+        
+        # 测试停滞的情况
+        stagnant_scores = [0.5, 0.51, 0.49, 0.52, 0.48, 0.5, 0.51, 0.49, 0.52, 0.48]
+        stagnation = detect_stagnation(stagnant_scores)
+        assert isinstance(stagnation, (bool, np.bool_))  # 允许numpy布尔类型
         
     def test_diversity_injection(self):
         """测试多样性注入"""
-        # 跳过这个测试，因为StagnationDetector不存在
-        pytest.skip("StagnationDetector类不存在")
+        from evolution.stagnation_detector import detect_stagnation
+        
+        # 测试停滞检测的边界情况
+        # 历史记录不足的情况
+        short_history = [0.1, 0.2, 0.3]
+        stagnation = detect_stagnation(short_history)
+        assert isinstance(stagnation, (bool, np.bool_))  # 允许numpy布尔类型
+        assert not stagnation  # 历史记录不足时应该返回False
 
 
 if __name__ == "__main__":

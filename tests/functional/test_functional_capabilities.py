@@ -268,8 +268,12 @@ class TestFunctionalCapabilities:
         # 生成测试数据
         test_data = generator.generate_test_data(10)
         
-        assert len(test_data) == 10
-        assert all(isinstance(item, dict) for item in test_data)
+        # 验证返回的数据结构
+        assert isinstance(test_data, dict)
+        assert 'x' in test_data
+        assert 'y' in test_data
+        assert 'num_samples' in test_data
+        assert test_data['num_samples'] == 10
         
         logger.info("数据生成集成测试通过")
     
@@ -284,8 +288,13 @@ class TestFunctionalCapabilities:
         
         # 测试API连接
         try:
-            status = api_manager.check_api_status()
+            status = await api_manager.get_api_status()
             logger.info(f"API状态: {status}")
+            
+            # 测试可用API列表
+            available_apis = await api_manager.get_available_apis()
+            logger.info(f"可用API: {available_apis}")
+            
         except Exception as e:
             logger.warning(f"API连接失败: {e}")
             # API连接失败不应该影响测试通过

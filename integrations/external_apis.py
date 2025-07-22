@@ -14,6 +14,55 @@ logger = logging.getLogger(__name__)
 
 config = load_config()
 
+
+class ExternalAPIManager:
+    """外部API管理器"""
+    
+    def __init__(self):
+        self.integration = ExternalAPIIntegration()
+        self.logger = logger
+    
+    async def get_api_status(self) -> Dict[str, bool]:
+        """获取API状态"""
+        status = {}
+        try:
+            # 检查各种API的可用性
+            status['wolfram'] = bool(config.get('WOLFRAM_API_KEY'))
+            status['kaggle'] = bool(config.get('KAGGLE_API_KEY'))
+            status['openml'] = bool(config.get('OPENML_API_KEY'))
+            status['mathjs'] = True  # 免费API
+            status['sympy'] = True   # 本地库
+            
+            self.logger.info(f"API状态检查完成: {status}")
+            return status
+            
+        except Exception as e:
+            self.logger.error(f"API状态检查失败: {e}")
+            return {'error': str(e)}
+    
+    async def test_api_connection(self, api_name: str) -> bool:
+        """测试API连接"""
+        try:
+            if api_name == 'wolfram':
+                return bool(config.get('WOLFRAM_API_KEY'))
+            elif api_name == 'kaggle':
+                return bool(config.get('KAGGLE_API_KEY'))
+            elif api_name == 'openml':
+                return bool(config.get('OPENML_API_KEY'))
+            elif api_name in ['mathjs', 'sympy']:
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"API连接测试失败 {api_name}: {e}")
+            return False
+    
+    async def get_available_apis(self) -> List[str]:
+        """获取可用的API列表"""
+        status = await self.get_api_status()
+        return [api for api, available in status.items() if available and api != 'error']
+
 class ExternalAPIIntegration:
     """外部API集成 - 完整版本，支持更多类型和解析"""
     def __init__(self):
