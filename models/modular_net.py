@@ -24,7 +24,7 @@ class ModularMathReasoningNet(nn.Module):
                 raise ValueError(f"Module config {i} is not a dictionary")
             
             input_source = cfg.get('input_source', 'initial_input')
-            if isinstance(input_source, int):
+            if isinstance(input_source, int): 
                 if input_source >= i or input_source < 0: 
                     raise ValueError(f"Module {i} has invalid input_source {input_source}.")
                 actual_input_dim = temp_module_outputs_dims.get(f'module_{input_source}', 0)
@@ -76,7 +76,7 @@ class ModularMathReasoningNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """简化前向传播 - 确保维度匹配"""
-        module_outputs = {'initial_input': x}
+        module_outputs = {'initial_input': x} 
         
         for i, module in enumerate(self.subnet_modules):
             # 获取输入

@@ -87,7 +87,13 @@ async def evolve_population_nsga2(population: List[ModularMathReasoningNet], num
     history_best_score = []
     
     evaluator = RealWorldEvaluator()
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # 设备选择逻辑：优先使用CUDA，其次MPS，最后CPU
+    if torch.cuda.is_available():
+        device = 'cuda'
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        device = 'mps'
+    else:
+        device = 'cpu'
     logger.info(f"使用设备: {device}")
 
     for gen in range(num_generations):

@@ -67,6 +67,10 @@ class SystemStatusChecker:
                 gpu_memory_total = torch.cuda.get_device_properties(0).total_memory
                 gpu_memory_percent = (gpu_memory / gpu_memory_total) * 100
                 gpu_memory_used_mb = gpu_memory / (1024 * 1024)
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                # MPS设备不支持内存统计，设置为0
+                gpu_memory_percent = 0
+                gpu_memory_used_mb = 0
             
             # 网络连接数
             try:
@@ -78,6 +82,7 @@ class SystemStatusChecker:
             python_version = sys.version
             torch_version = torch.__version__
             cuda_available = torch.cuda.is_available()
+            mps_available = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
             cuda_version = torch.version.cuda if cuda_available else "N/A"
             
             # 创建状态记录
@@ -177,8 +182,10 @@ class SystemStatusChecker:
         if status.cuda_available and status.gpu_memory_percent > 85:
             recommendations.append("考虑清理GPU缓存或减少GPU内存使用")
             
-        if not status.cuda_available:
-            recommendations.append("考虑启用CUDA以提升计算性能")
+        if not status.cuda_available and not hasattr(torch.backends, 'mps') or not torch.backends.mps.is_available():
+            recommendations.append("考虑启用CUDA或MPS以提升计算性能")
+        elif not status.cuda_available and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            recommendations.append("已启用MPS，可考虑安装CUDA以获得更好的性能")
             
         if not recommendations:
             recommendations.append("系统运行状态良好，无需特殊操作")
@@ -215,8 +222,9 @@ class SystemStatusChecker:
                 except ImportError:
                     missing_packages.append(package)
             
-            # 检查CUDA可用性
+            # 检查GPU可用性
             cuda_available = torch.cuda.is_available()
+            mps_available = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
             cuda_version = torch.version.cuda if cuda_available else None
             
             return {
@@ -229,9 +237,10 @@ class SystemStatusChecker:
                     "available": package_versions,
                     "missing": missing_packages
                 },
-                "cuda": {
-                    "available": cuda_available,
-                    "version": cuda_version
+                "gpu": {
+                    "cuda_available": cuda_available,
+                    "mps_available": mps_available,
+                    "cuda_version": cuda_version
                 },
                 "environment_ok": version_ok and len(missing_packages) == 0
             }
@@ -456,8 +465,9 @@ class SystemStatusChecker:
             env = environment_result
             report += f"""
    Python版本: {env['python_version']['version']} {'✅' if env['python_version']['ok'] else '❌'}
-   CUDA可用: {'✅' if env['cuda']['available'] else '❌'}
-   CUDA版本: {env['cuda']['version'] or 'N/A'}
+   CUDA可用: {'✅' if env['gpu']['cuda_available'] else '❌'}
+   MPS可用: {'✅' if env['gpu']['mps_available'] else '❌'}
+   CUDA版本: {env['gpu']['cuda_version'] or 'N/A'}
    
    已安装包:
 """
@@ -507,47 +517,112 @@ class SystemStatusChecker:
 📈 系统评级:
 """
         
-        # 综合评级
+        # 改进的综合评级算法
         overall_score = 0
-        total_checks = 0
+        max_possible_score = 0
         
+        # 1. 系统资源评分 (30分)
         if resources_result["status"] == "success":
             health = resources_result["health"]
+            status = resources_result["data"]
+            
+            # 基础分：健康状态
             if health["overall_status"] == "healthy":
-                overall_score += 25
+                overall_score += 20
             elif health["overall_status"] == "warning":
                 overall_score += 15
-            total_checks += 1
+            elif health["overall_status"] == "critical":
+                overall_score += 5
             
-        if environment_result["status"] == "success":
-            if environment_result["environment_ok"]:
-                overall_score += 25
-            total_checks += 1
+            # 性能加分：内存使用率
+            if status.memory_percent < 50:
+                overall_score += 10
+            elif status.memory_percent < 70:
+                overall_score += 5
+            elif status.memory_percent < 85:
+                overall_score += 2
             
-        if components_result["status"] == "success":
-            if components_result["summary"]["all_ok"]:
-                overall_score += 25
-            total_checks += 1
+            # GPU加分
+            if status.gpu_memory_percent > 0 or hasattr(status, 'mps_available') and status.mps_available:
+                overall_score += 5
             
-        if benchmarks_result["status"] == "success":
-            fast_benchmarks = sum(1 for b in benchmarks_result["benchmarks"].values() 
-                                if "status" in b and b["status"] == "fast")
-            if fast_benchmarks >= 2:
-                overall_score += 25
-            total_checks += 1
+            max_possible_score += 30
         
-        if total_checks > 0:
-            final_score = overall_score / total_checks
-            if final_score >= 80:
+        # 2. Python环境评分 (25分)
+        if environment_result["status"] == "success":
+            env = environment_result
+            
+            # 基础分：环境正常
+            if env["environment_ok"]:
+                overall_score += 15
+            
+            # Python版本加分
+            if env["python_version"]["ok"]:
+                overall_score += 5
+            
+            # GPU支持加分
+            if env["gpu"]["cuda_available"] or env["gpu"]["mps_available"]:
+                overall_score += 5
+            
+            max_possible_score += 25
+        
+        # 3. 核心组件评分 (25分)
+        if components_result["status"] == "success":
+            summary = components_result["summary"]
+            
+            # 基础分：所有组件正常
+            if summary["all_ok"]:
+                overall_score += 20
+            
+            # 可用组件比例加分
+            component_ratio = summary["available"] / summary["total"]
+            overall_score += int(component_ratio * 5)
+            
+            max_possible_score += 25
+        
+        # 4. 性能基准评分 (20分)
+        if benchmarks_result["status"] == "success":
+            benchs = benchmarks_result["benchmarks"]
+            
+            # 计算快速基准数量
+            fast_benchmarks = sum(1 for b in benchs.values() 
+                                if "status" in b and b["status"] == "fast")
+            normal_benchmarks = sum(1 for b in benchs.values() 
+                                  if "status" in b and b["status"] == "normal")
+            
+            # 基准性能评分
+            if fast_benchmarks >= 3:
+                overall_score += 15
+            elif fast_benchmarks >= 2:
+                overall_score += 10
+            elif fast_benchmarks >= 1:
+                overall_score += 5
+            
+            # 稳定性加分
+            if normal_benchmarks + fast_benchmarks >= len(benchs) * 0.8:
+                overall_score += 5
+            
+            max_possible_score += 20
+        
+        # 计算最终评分
+        if max_possible_score > 0:
+            final_score = (overall_score / max_possible_score) * 100
+            
+            # 改进的评级标准
+            if final_score >= 85:
                 grade = "🟢 优秀"
-            elif final_score >= 60:
+            elif final_score >= 70:
                 grade = "🟡 良好"
-            elif final_score >= 40:
+            elif final_score >= 50:
                 grade = "🟠 一般"
+            elif final_score >= 30:
+                grade = "🟡 需要改进"
             else:
-                grade = "🔴 需要改进"
+                grade = "🔴 需要优化"
                 
             report += f"   综合评分: {final_score:.1f}/100 {grade}\n"
+        else:
+            report += f"   综合评分: 无法计算 (检查失败)\n"
         
         report += "\n🎉 系统状态检查完成！"
         

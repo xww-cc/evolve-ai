@@ -201,10 +201,10 @@ class TestFunctionalCapabilities:
         checker = SystemStatusChecker()
         
         # 检查系统资源
-        checker.check_system_resources()
+        await checker.check_system_resources()
         
         # 检查Python环境
-        checker.check_python_environment()
+        await checker.check_python_environment()
         
         # 检查核心组件
         await checker.check_core_components()
@@ -213,15 +213,15 @@ class TestFunctionalCapabilities:
         await checker.check_performance_benchmarks()
         
         # 生成状态报告
-        status_report = checker.generate_status_report()
+        status_report = await checker.generate_status_report()
         
         logger.info("系统状态检查完成")
         
         # 基本断言
-        assert 'system_resources' in status_report
-        assert 'python_environment' in status_report
-        assert 'core_components' in status_report
-        assert 'performance_benchmarks' in status_report
+        assert '系统资源状态' in status_report
+        assert 'Python环境状态' in status_report
+        assert '核心组件状态' in status_report
+        assert '性能基准' in status_report
     
     @pytest.mark.asyncio
     async def test_error_handling_boundary(self, evaluators, test_population):
