@@ -50,24 +50,24 @@ class EvolutionVisualizer:
         """分析种群结构多样性"""
         structures = []
         for model in population:
+            # 分析模块化网络的结构
             structure = {
-                'hidden_size': model.hidden_size,
-                'reasoning_layers': model.reasoning_layers,
-                'attention_heads': model.attention_heads,
-                'memory_size': model.memory_size,
-                'reasoning_types': model.reasoning_types
+                'num_modules': len(model.subnet_modules),
+                'total_parameters': sum(p.numel() for p in model.parameters()),
+                'module_types': [getattr(module, 'module_type', 'unknown') for module in model.subnet_modules],
+                'output_dims': [getattr(module, 'output_dim', 0) for module in model.subnet_modules]
             }
             structures.append(structure)
         
         # 计算结构多样性指标
-        hidden_sizes = [s['hidden_size'] for s in structures]
-        reasoning_layers = [s['reasoning_layers'] for s in structures]
-        attention_heads = [s['attention_heads'] for s in structures]
+        num_modules = [s['num_modules'] for s in structures]
+        total_parameters = [s['total_parameters'] for s in structures]
+        module_types = [s['module_types'] for s in structures]
         
         return {
-            'unique_hidden_sizes': len(set(hidden_sizes)),
-            'unique_reasoning_layers': len(set(reasoning_layers)),
-            'unique_attention_heads': len(set(attention_heads)),
+            'unique_module_counts': len(set(num_modules)),
+            'unique_parameter_counts': len(set(total_parameters)),
+            'unique_module_type_combinations': len(set(str(mt) for mt in module_types)),
             'structure_diversity': len(set(str(s) for s in structures))
         }
     
@@ -83,40 +83,44 @@ class EvolutionVisualizer:
         avg_fitness = [h['avg_fitness'] for h in self.evolution_history]
         diversity = [h['diversity'] for h in self.evolution_history]
         
+        # 设置中文字体
+        plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS']
+        plt.rcParams['axes.unicode_minus'] = False
+        
         # 1. 适应度进化曲线
-        ax1.plot(generations, best_fitness, 'b-', label='最佳适应度', linewidth=2)
-        ax1.plot(generations, avg_fitness, 'r--', label='平均适应度', linewidth=2)
-        ax1.set_xlabel('代数')
-        ax1.set_ylabel('适应度')
-        ax1.set_title('适应度进化曲线')
+        ax1.plot(generations, best_fitness, 'b-', label='Best Fitness', linewidth=2)
+        ax1.plot(generations, avg_fitness, 'r--', label='Average Fitness', linewidth=2)
+        ax1.set_xlabel('Generation')
+        ax1.set_ylabel('Fitness')
+        ax1.set_title('Fitness Evolution Curve')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
         # 2. 多样性变化曲线
-        ax2.plot(generations, diversity, 'g-', label='种群多样性', linewidth=2)
-        ax2.set_xlabel('代数')
-        ax2.set_ylabel('多样性')
-        ax2.set_title('多样性变化曲线')
+        ax2.plot(generations, diversity, 'g-', label='Population Diversity', linewidth=2)
+        ax2.set_xlabel('Generation')
+        ax2.set_ylabel('Diversity')
+        ax2.set_title('Diversity Change Curve')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
         # 3. 结构多样性
         if self.structure_history:
             structure_diversity = [s['structure_diversity'] for s in self.structure_history]
-            ax3.plot(generations, structure_diversity, 'm-', label='结构多样性', linewidth=2)
-            ax3.set_xlabel('代数')
-            ax3.set_ylabel('结构多样性')
-            ax3.set_title('结构多样性变化')
+            ax3.plot(generations, structure_diversity, 'm-', label='Structure Diversity', linewidth=2)
+            ax3.set_xlabel('Generation')
+            ax3.set_ylabel('Structure Diversity')
+            ax3.set_title('Structure Diversity Change')
             ax3.legend()
             ax3.grid(True, alpha=0.3)
         
         # 4. 适应度分布箱线图
         if len(self.fitness_history) > 1:
             fitness_data = [h['all'] for h in self.fitness_history]
-            ax4.boxplot(fitness_data, labels=[f'G{i+1}' for i in range(len(fitness_data))])
-            ax4.set_xlabel('代数')
-            ax4.set_ylabel('适应度分布')
-            ax4.set_title('适应度分布箱线图')
+            ax4.boxplot(fitness_data, tick_labels=[f'G{i+1}' for i in range(len(fitness_data))])
+            ax4.set_xlabel('Generation')
+            ax4.set_ylabel('Fitness Distribution')
+            ax4.set_title('Fitness Distribution Boxplot')
             ax4.grid(True, alpha=0.3)
         
         plt.tight_layout()
@@ -153,9 +157,9 @@ class EvolutionVisualizer:
         
         plt.yticks(range(len(metrics)), metrics)
         plt.xticks(range(len(generations)), [f'G{i+1}' for i in generations])
-        plt.xlabel('代数')
-        plt.ylabel('多样性指标')
-        plt.title('结构多样性热力图')
+        plt.xlabel('Generation')
+        plt.ylabel('Diversity Metrics')
+        plt.title('Structure Diversity Heatmap')
         
         # 添加数值标签
         for i in range(len(metrics)):

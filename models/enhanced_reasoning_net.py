@@ -17,17 +17,22 @@ class EnhancedReasoningNet(nn.Module):
         self.reasoning_layers = reasoning_layers
         self.attention_heads = attention_heads
         
+        # 确保embed_dim能被num_heads整除
+        adjusted_hidden_size = (hidden_size // attention_heads) * attention_heads
+        if adjusted_hidden_size < attention_heads:
+            adjusted_hidden_size = attention_heads
+        
         # 1. 输入编码层
         self.input_encoder = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
+            nn.Linear(input_size, adjusted_hidden_size),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(hidden_size, hidden_size)
+            nn.Linear(adjusted_hidden_size, adjusted_hidden_size)
         )
         
         # 2. 注意力机制
         self.attention = nn.MultiheadAttention(
-            embed_dim=hidden_size,
+            embed_dim=adjusted_hidden_size,
             num_heads=attention_heads,
             dropout=0.1,
             batch_first=True
@@ -35,35 +40,35 @@ class EnhancedReasoningNet(nn.Module):
         
         # 3. 推理层
         self.reasoning_layers_list = nn.ModuleList([
-            ReasoningLayer(hidden_size, hidden_size) 
+            ReasoningLayer(adjusted_hidden_size, adjusted_hidden_size) 
             for _ in range(reasoning_layers)
         ])
         
         # 4. 记忆模块
-        self.memory_module = MemoryModule(hidden_size)
+        self.memory_module = MemoryModule(adjusted_hidden_size)
         
         # 5. 推理控制器
-        self.reasoning_controller = ReasoningController(hidden_size)
+        self.reasoning_controller = ReasoningController(adjusted_hidden_size)
         
         # 6. 输出层
         self.output_layers = nn.ModuleDict({
-            'mathematical_logic': nn.Linear(hidden_size, 1),
-            'symbolic_reasoning': nn.Linear(hidden_size, 1),
-            'abstract_reasoning': nn.Linear(hidden_size, 1),
-            'pattern_recognition': nn.Linear(hidden_size, 1),
-            'reasoning_chain': nn.Linear(hidden_size, 1),
-            'mathematical_proof': nn.Linear(hidden_size, 1),
-            'logical_chain': nn.Linear(hidden_size, 1),
-            'abstract_concepts': nn.Linear(hidden_size, 1),
-            'creative_reasoning': nn.Linear(hidden_size, 1),
-            'multi_step_reasoning': nn.Linear(hidden_size, 1)
+            'mathematical_logic': nn.Linear(adjusted_hidden_size, 1),
+            'symbolic_reasoning': nn.Linear(adjusted_hidden_size, 1),
+            'abstract_reasoning': nn.Linear(adjusted_hidden_size, 1),
+            'pattern_recognition': nn.Linear(adjusted_hidden_size, 1),
+            'reasoning_chain': nn.Linear(adjusted_hidden_size, 1),
+            'mathematical_proof': nn.Linear(adjusted_hidden_size, 1),
+            'logical_chain': nn.Linear(adjusted_hidden_size, 1),
+            'abstract_concepts': nn.Linear(adjusted_hidden_size, 1),
+            'creative_reasoning': nn.Linear(adjusted_hidden_size, 1),
+            'multi_step_reasoning': nn.Linear(adjusted_hidden_size, 1)
         })
         
         # 7. 符号推理模块
-        self.symbolic_module = SymbolicReasoningModule(hidden_size)
+        self.symbolic_module = SymbolicReasoningModule(adjusted_hidden_size)
         
         # 8. 进化标记
-        self.evolution_markers = nn.Parameter(torch.randn(hidden_size))
+        self.evolution_markers = nn.Parameter(torch.randn(adjusted_hidden_size))
         
     def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         """前向传播"""

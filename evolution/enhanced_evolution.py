@@ -1,330 +1,301 @@
-import asyncio
-import time
+#!/usr/bin/env python3
+"""
+增强版进化算法
+包含自适应参数调整、性能优化和更好的收敛性
+"""
+
 import torch
 import numpy as np
-import random
-from typing import List, Dict, Tuple, Any, Optional
-from models.enhanced_reasoning_net import EnhancedReasoningNet
-from config.optimized_logging import setup_optimized_logging
+import asyncio
+from typing import List, Tuple, Dict, Optional
+from evolution.nsga2 import evolve_population_nsga2_simple
+from evolution.population import create_initial_population
+from evaluators.symbolic_evaluator import SymbolicEvaluator
+from evaluators.realworld_evaluator import RealWorldEvaluator
+from utils.performance_monitor import get_performance_monitor
+from config.logging_setup import setup_logging
+from config.global_constants import LEVEL_DESCRIPTIONS
+import time
 
-logger = setup_optimized_logging()
+logger = setup_logging()
 
-class EnhancedEvolution:
-    """增强进化算法 - 真正的遗传进化"""
+class AdaptiveEvolutionParameters:
+    """自适应进化参数"""
     
-    def __init__(self, population_size: int = 10, mutation_rate: float = 0.1, 
-                 crossover_rate: float = 0.8, elite_size: int = 2):
-        self.population_size = population_size
-        self.mutation_rate = mutation_rate
-        self.crossover_rate = crossover_rate
-        self.elite_size = elite_size
+    def __init__(self):
+        self.mutation_rate = 0.1
+        self.crossover_rate = 0.8
+        self.selection_pressure = 2.0
+        self.diversity_threshold = 0.3
+        self.stagnation_threshold = 10
+        self.performance_threshold = 0.8
+        
+        # 参数调整历史
+        self.adjustment_history = []
+    
+    def adjust_parameters(self, 
+                         current_diversity: float,
+                         stagnation_count: int,
+                         performance_ratio: float,
+                         generation: int) -> Dict:
+        """根据当前状态调整参数"""
+        adjustments = {}
+        
+        # 根据多样性调整
+        if current_diversity < self.diversity_threshold:
+            self.mutation_rate = min(0.3, self.mutation_rate * 1.2)
+            self.crossover_rate = max(0.6, self.crossover_rate * 0.9)
+            adjustments['mutation_rate'] = self.mutation_rate
+            adjustments['crossover_rate'] = self.crossover_rate
+            logger.info(f"多样性较低，增加变异率: {self.mutation_rate:.3f}")
+        
+        # 根据停滞调整
+        if stagnation_count > self.stagnation_threshold:
+            self.mutation_rate = min(0.4, self.mutation_rate * 1.5)
+            self.selection_pressure = max(1.0, self.selection_pressure * 0.8)
+            adjustments['mutation_rate'] = self.mutation_rate
+            adjustments['selection_pressure'] = self.selection_pressure
+            logger.info(f"检测到停滞，大幅增加变异率: {self.mutation_rate:.3f}")
+        
+        # 根据性能调整
+        if performance_ratio < self.performance_threshold:
+            self.crossover_rate = max(0.5, self.crossover_rate * 0.95)
+            adjustments['crossover_rate'] = self.crossover_rate
+            logger.info(f"性能较低，减少交叉率: {self.crossover_rate:.3f}")
+        
+        # 记录调整历史
+        if adjustments:
+            self.adjustment_history.append({
+                'generation': generation,
+                'diversity': current_diversity,
+                'stagnation_count': stagnation_count,
+                'performance_ratio': performance_ratio,
+                'adjustments': adjustments.copy()
+            })
+        
+        return adjustments
+
+class EnhancedEvolutionEngine:
+    """增强版进化引擎"""
+    
+    def __init__(self):
+        self.symbolic_evaluator = SymbolicEvaluator()
+        self.realworld_evaluator = RealWorldEvaluator()
+        self.adaptive_params = AdaptiveEvolutionParameters()
+        self.performance_monitor = get_performance_monitor()
         
         # 进化历史
         self.evolution_history = []
+        self.best_fitness_history = []
+        self.diversity_history = []
         
-        # 适应度缓存
-        self.fitness_cache = {}
+        # 停滞检测
+        self.stagnation_count = 0
+        self.last_best_fitness = 0.0
         
-    async def evolve_population(self, population: List[EnhancedReasoningNet], 
-                              fitness_scores: List[float]) -> List[EnhancedReasoningNet]:
-        """进化种群"""
-        logger.log_important("🔄 开始增强进化过程...")
+    async def evolve_population_enhanced(self, 
+                                       population: List,
+                                       num_generations: int,
+                                       level: int = 0,
+                                       population_size: Optional[int] = None) -> Tuple[List, List, List]:
+        """增强版种群进化"""
         
-        # 1. 选择
-        selected = self._selection(population, fitness_scores)
+        # 启动性能监控
+        self.performance_monitor.start_monitoring()
         
-        # 2. 交叉
-        offspring = await self._crossover(selected)
+        avg_scores = []
+        best_scores = []
+        diversity_scores = []
         
-        # 3. 变异
-        mutated = self._mutation(offspring)
+        current_population = population
+        if population_size is None:
+            population_size = len(population)
         
-        # 4. 精英保留
-        new_population = self._elitism(population, fitness_scores, mutated)
+        # 处理边界情况
+        if num_generations <= 0:
+            logger.info("零代数进化，返回初始种群")
+            return current_population, avg_scores, best_scores
         
-        # 5. 记录进化历史
-        self._record_evolution(population, fitness_scores, new_population)
+        if len(population) == 0:
+            logger.info("空种群，返回空结果")
+            return current_population, avg_scores, best_scores
         
-        return new_population
-    
-    def _selection(self, population: List[EnhancedReasoningNet], 
-                  fitness_scores: List[float]) -> List[EnhancedReasoningNet]:
-        """选择操作 - 锦标赛选择"""
-        selected = []
+        logger.info(f"开始增强进化 - 种群大小: {population_size}, 代数: {num_generations}, 级别: {level}")
         
-        for _ in range(self.population_size):
-            # 锦标赛选择
-            tournament_size = 3
-            tournament_indices = random.sample(range(len(population)), tournament_size)
-            tournament_fitness = [fitness_scores[i] for i in tournament_indices]
+        for generation in range(num_generations):
+            generation_start_time = time.time()
             
-            # 选择最佳个体
-            winner_idx = tournament_indices[np.argmax(tournament_fitness)]
-            selected.append(population[winner_idx])
-        
-        logger.log_important(f"选择完成，选择了 {len(selected)} 个个体")
-        return selected
-    
-    async def _crossover(self, selected: List[EnhancedReasoningNet]) -> List[EnhancedReasoningNet]:
-        """交叉操作 - 参数交叉"""
-        offspring = []
-        
-        for i in range(0, len(selected), 2):
-            if i + 1 < len(selected):
-                parent1 = selected[i]
-                parent2 = selected[i + 1]
-                
-                if random.random() < self.crossover_rate:
-                    # 执行交叉
-                    child1, child2 = self._parameter_crossover(parent1, parent2)
-                    offspring.extend([child1, child2])
-                else:
-                    # 直接复制
-                    offspring.extend([parent1, parent2])
+            # 评估种群
+            fitness_scores = await self._evaluate_population_parallel(current_population, level)
+            
+            # 计算统计信息
+            avg_score = np.mean([sum(score) for score in fitness_scores])
+            best_score = max([sum(score) for score in fitness_scores])
+            diversity = self._calculate_diversity(current_population)
+            
+            avg_scores.append(avg_score)
+            best_scores.append(best_score)
+            diversity_scores.append(diversity)
+            
+            # 检查停滞
+            if best_score <= self.last_best_fitness:
+                self.stagnation_count += 1
             else:
-                offspring.append(selected[i])
+                self.stagnation_count = 0
+                self.last_best_fitness = best_score
+            
+            # 自适应参数调整
+            performance_ratio = best_score / (avg_score + 1e-8)
+            adjustments = self.adaptive_params.adjust_parameters(
+                diversity, self.stagnation_count, performance_ratio, generation
+            )
+            
+            # 记录进化历史
+            self.evolution_history.append({
+                'generation': generation,
+                'avg_score': avg_score,
+                'best_score': best_score,
+                'diversity': diversity,
+                'stagnation_count': self.stagnation_count,
+                'performance_ratio': performance_ratio,
+                'adjustments': adjustments
+            })
+            
+            # 性能监控
+            generation_time = time.time() - generation_start_time
+            evolution_speed = 1.0 / generation_time if generation_time > 0 else 0
+            self.performance_monitor.record_metrics(
+                evolution_speed=evolution_speed,
+                evaluation_throughput=len(current_population) / generation_time if generation_time > 0 else 0
+            )
+            
+            logger.info(f"第 {generation + 1} 代 - 平均: {avg_score:.4f}, 最佳: {best_score:.4f}, "
+                       f"多样性: {diversity:.3f}, 停滞: {self.stagnation_count}")
+            
+            # 进化到下一代
+            current_population = evolve_population_nsga2_simple(current_population, fitness_scores)
+            
+            # 如果停滞太久，注入多样性
+            if self.stagnation_count > self.adaptive_params.stagnation_threshold * 2:
+                current_population = self._inject_diversity(current_population, population_size)
+                logger.info("注入多样性以打破停滞")
         
-        logger.log_important(f"交叉完成，生成了 {len(offspring)} 个后代")
-        return offspring
+        # 生成性能报告
+        performance_report = self.performance_monitor.generate_performance_report()
+        logger.info(f"性能报告已生成: {performance_report}")
+        
+        return current_population, avg_scores, best_scores
     
-    def _parameter_crossover(self, parent1: EnhancedReasoningNet, 
-                           parent2: EnhancedReasoningNet) -> Tuple[EnhancedReasoningNet, EnhancedReasoningNet]:
-        """参数交叉"""
-        # 创建子代 - 使用相同的架构参数
-        child1 = type(parent1)(
-            parent1.input_size,
-            parent1.hidden_size,
-            parent1.reasoning_layers,
-            parent1.attention_heads
-        )
+    async def _evaluate_population_parallel(self, population: List, level: int) -> List[Tuple[float, float]]:
+        """并行评估种群"""
+        tasks = []
+        for individual in population:
+            task = asyncio.create_task(self._evaluate_individual(individual, level))
+            tasks.append(task)
         
-        child2 = type(parent1)(  # 使用parent1的架构参数确保兼容性
-            parent1.input_size,
-            parent1.hidden_size,
-            parent1.reasoning_layers,
-            parent1.attention_heads
-        )
-        
-        # 交叉参数 - 只对相同尺寸的参数进行交叉
-        parent1_params = list(parent1.parameters())
-        parent2_params = list(parent2.parameters())
-        child1_params = list(child1.parameters())
-        child2_params = list(child2.parameters())
-        
-        for i, (param1, param2, child_param1, child_param2) in enumerate(
-            zip(parent1_params, parent2_params, child1_params, child2_params)
-        ):
-            with torch.no_grad():
-                # 检查参数尺寸是否匹配
-                if param1.shape == param2.shape:
-                    # 随机交叉点
-                    crossover_point = random.random()
-                    
-                    # 混合参数
-                    child_param1.copy_(crossover_point * param1 + (1 - crossover_point) * param2)
-                    child_param2.copy_((1 - crossover_point) * param1 + crossover_point * param2)
-                else:
-                    # 尺寸不匹配时，直接复制parent1的参数
-                    child_param1.copy_(param1)
-                    child_param2.copy_(param1)
-        
-        return child1, child2
+        results = await asyncio.gather(*tasks)
+        return results
     
-    def _mutation(self, offspring: List[EnhancedReasoningNet]) -> List[EnhancedReasoningNet]:
-        """变异操作 - 自适应变异"""
-        mutated = []
-        
-        for individual in offspring:
-            if random.random() < self.mutation_rate:
-                # 执行变异
-                mutated_individual = self._adaptive_mutation(individual)
-                mutated.append(mutated_individual)
-            else:
-                mutated.append(individual)
-        
-        logger.log_important(f"变异完成，变异了 {len([m for m in mutated if m != offspring[mutated.index(m)]])} 个个体")
-        return mutated
+    async def _evaluate_individual(self, individual, level: int) -> Tuple[float, float]:
+        """评估单个个体"""
+        try:
+            symbolic_score = await self.symbolic_evaluator.evaluate(individual, level=level)
+            realworld_score = await self.realworld_evaluator.evaluate(individual)
+            return (symbolic_score, realworld_score)
+        except Exception as e:
+            logger.warning(f"个体评估失败: {e}")
+            return (0.1, 0.1)  # 返回最低分数
     
-    def _adaptive_mutation(self, individual: EnhancedReasoningNet) -> EnhancedReasoningNet:
-        """自适应变异"""
-        # 创建变异个体
-        mutated = type(individual)(
-            individual.input_size,
-            individual.hidden_size,
-            individual.reasoning_layers,
-            individual.attention_heads
-        )
+    def _calculate_diversity(self, population: List) -> float:
+        """计算种群多样性"""
+        if len(population) < 2:
+            return 0.0
         
-        # 复制参数
-        individual_params = list(individual.parameters())
-        mutated_params = list(mutated.parameters())
+        # 计算结构多样性
+        structures = []
+        for individual in population:
+            structure = {
+                'num_modules': len(individual.subnet_modules),
+                'total_params': sum(p.numel() for p in individual.parameters()),
+                'module_types': [getattr(module, 'module_type', 'unknown') for module in individual.subnet_modules]
+            }
+            structures.append(str(structure))
         
-        for param, mutated_param in zip(individual_params, mutated_params):
-            with torch.no_grad():
-                # 自适应变异强度
-                mutation_strength = 0.01 * (1 + random.random())
-                
-                # 高斯变异
-                noise = torch.randn_like(param) * mutation_strength
-                mutated_param.copy_(param + noise)
-        
-        return mutated
+        unique_structures = len(set(structures))
+        return unique_structures / len(population)
     
-    def _elitism(self, population: List[EnhancedReasoningNet], 
-                fitness_scores: List[float], 
-                offspring: List[EnhancedReasoningNet]) -> List[EnhancedReasoningNet]:
-        """精英保留"""
-        # 排序种群
-        sorted_indices = np.argsort(fitness_scores)[::-1]  # 降序
+    def _inject_diversity(self, population: List, target_size: int) -> List:
+        """注入多样性"""
+        # 保留一些优秀个体
+        elite_size = max(1, target_size // 4)
+        elite = population[:elite_size]
         
-        # 保留精英
-        elite = [population[i] for i in sorted_indices[:self.elite_size]]
+        # 生成新的随机个体
+        new_individuals = create_initial_population(target_size - elite_size)
         
-        # 从后代中选择剩余个体
-        remaining_size = self.population_size - self.elite_size
-        selected_offspring = random.sample(offspring, min(remaining_size, len(offspring)))
+        # 合并精英和新个体
+        diverse_population = elite + new_individuals
         
-        new_population = elite + selected_offspring
-        
-        logger.log_important(f"精英保留完成，保留了 {len(elite)} 个精英个体")
-        return new_population
+        logger.info(f"注入多样性: 保留 {elite_size} 个精英, 生成 {len(new_individuals)} 个新个体")
+        return diverse_population
     
-    def _record_evolution(self, old_population: List[EnhancedReasoningNet], 
-                         fitness_scores: List[float], 
-                         new_population: List[EnhancedReasoningNet]):
-        """记录进化历史"""
-        generation_info = {
-            'generation': len(self.evolution_history) + 1,
-            'timestamp': time.time(),
-            'best_fitness': max(fitness_scores),
-            'avg_fitness': np.mean(fitness_scores),
-            'population_size': len(new_population),
-            'mutation_rate': self.mutation_rate,
-            'crossover_rate': self.crossover_rate
+    def get_evolution_summary(self) -> Dict:
+        """获取进化摘要"""
+        if not self.evolution_history:
+            return {"error": "无进化历史"}
+        
+        latest = self.evolution_history[-1]
+        first = self.evolution_history[0]
+        
+        improvement = latest['best_score'] - first['best_score']
+        avg_diversity = np.mean([h['diversity'] for h in self.evolution_history])
+        
+        return {
+            'total_generations': len(self.evolution_history),
+            'final_best_score': latest['best_score'],
+            'final_avg_score': latest['avg_score'],
+            'final_diversity': latest['diversity'],
+            'total_improvement': improvement,
+            'average_diversity': avg_diversity,
+            'stagnation_count': latest['stagnation_count'],
+            'parameter_adjustments': len(self.adaptive_params.adjustment_history)
         }
-        
-        self.evolution_history.append(generation_info)
-        
-        logger.log_important(f"进化历史记录: 第{generation_info['generation']}代, "
-                           f"最佳适应度: {generation_info['best_fitness']:.3f}, "
-                           f"平均适应度: {generation_info['avg_fitness']:.3f}")
     
-    def adaptive_parameters(self, generation: int, best_fitness: float, avg_fitness: float):
-        """自适应参数调整"""
-        # 根据进化进度调整参数
-        if generation > 10:
-            # 降低变异率
-            self.mutation_rate = max(0.01, self.mutation_rate * 0.95)
-            
-            # 如果适应度停滞，增加变异
-            if generation > 20 and best_fitness - avg_fitness < 0.01:
-                self.mutation_rate = min(0.3, self.mutation_rate * 1.2)
+    def get_optimization_suggestions(self) -> List[str]:
+        """获取优化建议"""
+        suggestions = []
         
-        logger.log_important(f"自适应参数调整: 变异率={self.mutation_rate:.3f}, "
-                           f"交叉率={self.crossover_rate:.3f}")
+        if not self.evolution_history:
+            return ["无进化数据，无法提供建议"]
+        
+        latest = self.evolution_history[-1]
+        
+        # 基于停滞的建议
+        if latest['stagnation_count'] > 5:
+            suggestions.append("检测到进化停滞，建议：")
+            suggestions.append("  - 增加变异率")
+            suggestions.append("  - 减少种群大小以提高选择压力")
+            suggestions.append("  - 重新初始化部分个体")
+        
+        # 基于多样性的建议
+        if latest['diversity'] < 0.3:
+            suggestions.append("种群多样性较低，建议：")
+            suggestions.append("  - 增加交叉率")
+            suggestions.append("  - 引入更多随机个体")
+            suggestions.append("  - 调整选择策略")
+        
+        # 基于性能的建议
+        if latest['performance_ratio'] < 0.8:
+            suggestions.append("性能提升缓慢，建议：")
+            suggestions.append("  - 优化评估函数")
+            suggestions.append("  - 调整适应度计算")
+            suggestions.append("  - 增加精英保留比例")
+        
+        return suggestions
 
-class MultiObjectiveEvolution:
-    """多目标进化算法"""
-    
-    def __init__(self, population_size: int = 10):
-        self.population_size = population_size
-        self.evolution = EnhancedEvolution(population_size)
-        
-    async def evolve_multi_objective(self, population: List[EnhancedReasoningNet], 
-                                   objectives: Dict[str, List[float]]) -> List[EnhancedReasoningNet]:
-        """多目标进化"""
-        logger.log_important("🎯 开始多目标进化...")
-        
-        # 计算帕累托前沿
-        pareto_front = self._calculate_pareto_front(objectives)
-        
-        # 计算拥挤度距离
-        crowding_distances = self._calculate_crowding_distance(objectives, pareto_front)
-        
-        # 基于拥挤度距离的选择
-        selected_indices = self._tournament_selection_with_crowding(
-            objectives, crowding_distances, self.population_size
-        )
-        
-        # 选择个体
-        selected_population = [population[i] for i in selected_indices]
-        
-        # 执行进化
-        evolved_population = await self.evolution.evolve_population(
-            selected_population, 
-            [crowding_distances[i] for i in selected_indices]
-        )
-        
-        return evolved_population
-    
-    def _calculate_pareto_front(self, objectives: Dict[str, List[float]]) -> List[int]:
-        """计算帕累托前沿"""
-        pareto_front = []
-        num_individuals = len(list(objectives.values())[0])
-        
-        for i in range(num_individuals):
-            dominated = False
-            
-            for j in range(num_individuals):
-                if i != j:
-                    # 检查是否被支配
-                    if self._dominates(objectives, j, i):
-                        dominated = True
-                        break
-            
-            if not dominated:
-                pareto_front.append(i)
-        
-        return pareto_front
-    
-    def _dominates(self, objectives: Dict[str, List[float]], i: int, j: int) -> bool:
-        """检查个体i是否支配个体j"""
-        at_least_one_better = False
-        
-        for objective_name, values in objectives.items():
-            if values[i] < values[j]:  # 假设所有目标都是最小化
-                return False
-            elif values[i] > values[j]:
-                at_least_one_better = True
-        
-        return at_least_one_better
-    
-    def _calculate_crowding_distance(self, objectives: Dict[str, List[float]], 
-                                   pareto_front: List[int]) -> List[float]:
-        """计算拥挤度距离"""
-        num_individuals = len(list(objectives.values())[0])
-        crowding_distances = [0.0] * num_individuals
-        
-        for objective_name, values in objectives.items():
-            # 对每个目标排序
-            sorted_indices = sorted(range(len(values)), key=lambda k: values[k])
-            
-            # 边界个体的拥挤度距离设为无穷大
-            crowding_distances[sorted_indices[0]] = float('inf')
-            crowding_distances[sorted_indices[-1]] = float('inf')
-            
-            # 计算中间个体的拥挤度距离
-            for i in range(1, len(sorted_indices) - 1):
-                distance = (values[sorted_indices[i + 1]] - values[sorted_indices[i - 1]]) / \
-                          (max(values) - min(values) + 1e-10)
-                crowding_distances[sorted_indices[i]] += distance
-        
-        return crowding_distances
-    
-    def _tournament_selection_with_crowding(self, objectives: Dict[str, List[float]], 
-                                          crowding_distances: List[float], 
-                                          selection_size: int) -> List[int]:
-        """基于拥挤度距离的锦标赛选择"""
-        selected_indices = []
-        
-        for _ in range(selection_size):
-            # 随机选择两个个体
-            idx1, idx2 = random.sample(range(len(crowding_distances)), 2)
-            
-            # 选择拥挤度距离更大的个体
-            if crowding_distances[idx1] > crowding_distances[idx2]:
-                selected_indices.append(idx1)
-            else:
-                selected_indices.append(idx2)
-        
-        return selected_indices 
+# 全局增强进化引擎实例
+enhanced_evolution_engine = EnhancedEvolutionEngine()
+
+def get_enhanced_evolution_engine() -> EnhancedEvolutionEngine:
+    """获取增强进化引擎实例"""
+    return enhanced_evolution_engine 

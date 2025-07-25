@@ -92,7 +92,20 @@ class EnhancedEvaluator:
             
             try:
                 output = model(input_tensor)
-                comprehensive_output = output.get('comprehensive_reasoning', torch.tensor(0.0))
+                
+                # 尝试获取综合推理输出，如果不存在则使用第一个可用的输出
+                if 'comprehensive_reasoning' in output:
+                    comprehensive_output = output['comprehensive_reasoning']
+                elif 'mathematical_logic' in output:
+                    comprehensive_output = output['mathematical_logic']
+                elif 'symbolic_reasoning' in output:
+                    comprehensive_output = output['symbolic_reasoning']
+                elif 'multi_step_reasoning' in output:
+                    comprehensive_output = output['multi_step_reasoning']
+                else:
+                    # 使用第一个可用的输出
+                    first_key = list(output.keys())[0]
+                    comprehensive_output = output[first_key]
                 
                 if isinstance(comprehensive_output, torch.Tensor):
                     prediction = comprehensive_output.mean().item()

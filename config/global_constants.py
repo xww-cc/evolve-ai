@@ -24,3 +24,11 @@ LEVEL_DESCRIPTIONS: Dict[int, str] = {
     5: '线性代数',
     6: 'AGI数学融合'
 }
+
+# 模块配置
+MODULES_CONFIG = {
+    'num_modules': 3,
+    'module_widths': [16, 16, 16],
+    'activation_functions': ['ReLU', 'Tanh', 'Sigmoid'],
+    'epigenetic_markers': True
+}

@@ -153,12 +153,11 @@ class TestFunctionalCapabilities:
         """测试可视化生成"""
         logger.info("测试可视化生成")
         
-        from utils.visualization import plot_evolution
+        from utils.visualization import EvolutionVisualizer
         
         # 运行进化并收集数据
         population = test_population
-        avg_scores = []
-        best_scores = []
+        visualizer = EvolutionVisualizer()
         
         for generation in range(3):
             # 评估
@@ -174,18 +173,28 @@ class TestFunctionalCapabilities:
             # 计算分数
             avg_symbolic = sum(score[0] for score in fitness_scores) / len(fitness_scores)
             avg_realworld = sum(score[1] for score in fitness_scores) / len(fitness_scores)
-            avg_scores.append((avg_symbolic + avg_realworld) / 2)
+            avg_score = (avg_symbolic + avg_realworld) / 2
             
             best_symbolic = max(score[0] for score in fitness_scores)
             best_realworld = max(score[1] for score in fitness_scores)
-            best_scores.append((best_symbolic + best_realworld) / 2)
+            best_score = (best_symbolic + best_realworld) / 2
+            
+            # 记录到可视化器
+            visualizer.record_generation(
+                generation=generation,
+                population=population,
+                fitness_scores=[avg_score, best_score],
+                diversity=0.5,  # 默认多样性值
+                best_fitness=best_score,
+                avg_fitness=avg_score
+            )
             
             # 进化
             population = evolve_population_nsga2_simple(population, fitness_scores)
         
         # 生成可视化
         try:
-            plot_evolution(avg_scores, best_scores)
+            visualizer.plot_evolution_curves()
             logger.info("可视化生成成功")
         except Exception as e:
             logger.warning(f"可视化生成失败: {e}")
@@ -200,28 +209,30 @@ class TestFunctionalCapabilities:
         
         checker = SystemStatusChecker()
         
-        # 检查系统资源
-        await checker.check_system_resources()
+        # 检查所有组件状态
+        component_statuses = checker.check_all_components()
         
-        # 检查Python环境
-        await checker.check_python_environment()
-        
-        # 检查核心组件
-        await checker.check_core_components()
-        
-        # 检查性能基准
-        await checker.check_performance_benchmarks()
-        
-        # 生成状态报告
-        status_report = await checker.generate_status_report()
+        # 获取系统总结
+        system_summary = checker.get_system_summary()
         
         logger.info("系统状态检查完成")
         
         # 基本断言
-        assert '系统资源状态' in status_report
-        assert 'Python环境状态' in status_report
-        assert '核心组件状态' in status_report
-        assert '性能基准' in status_report
+        assert 'overall_status' in system_summary
+        assert 'total_components' in system_summary
+        assert 'healthy_components' in system_summary
+        assert 'component_details' in system_summary
+        
+        # 验证组件状态
+        assert len(component_statuses) > 0
+        for component_name, status in component_statuses.items():
+            assert hasattr(status, 'name')
+            assert hasattr(status, 'status')
+            assert hasattr(status, 'message')
+            assert status.status in ['healthy', 'warning', 'error']
+        
+        logger.info(f"系统总体状态: {system_summary['overall_status']}")
+        logger.info(f"健康组件数: {system_summary['healthy_components']}")
     
     @pytest.mark.asyncio
     async def test_error_handling_boundary(self, evaluators, test_population):
@@ -314,7 +325,7 @@ class TestFunctionalCapabilities:
             test_individual = test_population[0]
             
             # 获取解释
-            explanation = xai.explain_model_decision(test_individual, "test_input")
+            explanation = await xai.explain_model_decision(test_individual, "test_input")
             
             assert isinstance(explanation, str)
             assert len(explanation) > 0

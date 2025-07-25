@@ -250,10 +250,15 @@ class AdvancedReasoningLayer(nn.Module):
         self.layer_norm2 = nn.LayerNorm(hidden_size)
         self.layer_norm3 = nn.LayerNorm(hidden_size)
         
-        # 自注意力
+        # 自注意力 - 确保embed_dim能被num_heads整除
+        num_heads = 4
+        adjusted_hidden_size = (hidden_size // num_heads) * num_heads
+        if adjusted_hidden_size < num_heads:
+            adjusted_hidden_size = num_heads
+        
         self.self_attention = nn.MultiheadAttention(
-            embed_dim=hidden_size,
-            num_heads=4,
+            embed_dim=adjusted_hidden_size,
+            num_heads=num_heads,
             dropout=0.1,
             batch_first=True
         )

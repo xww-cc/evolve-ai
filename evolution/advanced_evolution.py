@@ -197,9 +197,11 @@ class AdvancedEvolution:
                 params = list(model.parameters())
                 param_features = []
                 for param in params:
+                    # 安全计算标准差，避免NaN
+                    std_val = param.std().item() if param.numel() > 1 else 0.0
                     param_features.extend([
                         param.mean().item(),
-                        param.std().item(),
+                        std_val,
                         param.max().item(),
                         param.min().item()
                     ])
@@ -466,7 +468,9 @@ class AdvancedEvolution:
             with torch.no_grad():
                 # 只处理形状匹配的参数
                 if param.shape == mutated_param.shape:
-                    mutation_strength = 0.01 * (1 + np.random.rand()) * (1 + param.std().item())
+                    # 安全计算标准差，避免NaN
+                    std_val = param.std().item() if param.numel() > 1 else 0.0
+                    mutation_strength = 0.01 * (1 + np.random.rand()) * (1 + std_val)
                     noise = torch.randn_like(param) * mutation_strength
                     mutated_param.copy_(param + noise)
                 else:

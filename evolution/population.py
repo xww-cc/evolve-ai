@@ -28,28 +28,27 @@ def create_initial_population(pop_size: int = POPULATION_SIZE) -> List[ModularMa
             use_bn = random.choice([True, False])
             module_type = random.choice(possible_module_types)
             
-            # 输入维度就是当前维度
-            input_dim = current_dim
-            
             # 输出维度确保合理
             output_dim = random.randrange(MIN_SUBNET_WIDTH, MAX_SUBNET_WIDTH + 1, WIDTH_STEP)
             output_dim = max(1, output_dim)  # 确保至少为1
             
-            # 更新当前维度
-            current_dim = output_dim
+            # 确定输入源
+            if i == 0:
+                input_source = 'initial_input'
+            else:
+                input_source = f'module_{i-1}'
             
             modules_config.append({
-                'input_dim': input_dim,
+                'input_source': input_source,
                 'output_dim': output_dim,
                 'widths': widths,
                 'activation_fn_name': activation,
                 'use_batchnorm': use_bn,
-                'module_type': module_type,
-                'input_source': 'initial_input' if i == 0 else f'module_{i-1}'
+                'module_type': module_type
             })
 
         epigenetic_markers = EpigeneticMarkers()
-        individual = ModularMathReasoningNet(modules_config, epigenetic_markers)
+        individual = ModularMathReasoningNet(modules_config=modules_config, epigenetic_markers=epigenetic_markers)
         pop.append(individual)
     
     logger.info(f"初始种群创建完成，共 {len(pop)} 个个体")
