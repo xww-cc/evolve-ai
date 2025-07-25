@@ -111,9 +111,8 @@ class SymbolicEvaluator:
             
             # 高级符号提取（使用LLM）
             try:
-                import sympy as sp
-                input_vars = sp.Matrix([[sp.symbols('x')], [sp.symbols('y')], [sp.symbols('z')], [sp.symbols('w')]])
-                expr = await model.extract_symbolic(input_vars, use_llm=True)
+                # 修复参数调用问题
+                expr = await model.extract_symbolic(use_llm=True)
                 
                 # 高级评分
                 advanced_score = 0.0
@@ -152,6 +151,7 @@ class SymbolicEvaluator:
 async def evaluate_symbolic(model: ModularMathReasoningNet, device: str, level: int) -> float:
     """评估符号推理能力 - 完整"""
     try:
+        # 修复参数调用问题
         symbolic_expr = await model.extract_symbolic(use_llm=True)
         
         if symbolic_expr is not None:

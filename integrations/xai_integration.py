@@ -15,39 +15,43 @@ logger = setup_logging()
 config = load_config()
 
 class XAIIntegration:
-    """XAI API集成类，完整实现异步调用、重试、清理"""
-    def __init__(self, api_type: str = config['XAI_API_TYPE'], model: str = config['XAI_MODEL']):
+    """LLM API集成类，完整实现异步调用、重试、清理"""
+    def __init__(self, api_type: str = config['LLM_API_TYPE'], model: str = config['LLM_MODEL']):
         self.api_type = api_type
         self.model = model
         if api_type == "xai":
             self.api_key = config['XAI_API_KEY']
-            self.base_url = config['XAI_BASE_URL']
+            self.base_url = config['XAI_API_URL']
             self.supported_models = ["grok-3-mini", "grok-3", "grok-4"]
         elif api_type == "deepseek":
             self.api_key = config['DEEPSEEK_API_KEY']
             self.base_url = "https://api.deepseek.com/v1"
             self.supported_models = ["deepseek-chat", "deepseek-coder"]
+        elif api_type == "qwen":
+            self.api_key = config['QWEN_API_KEY']
+            self.base_url = config['QWEN_API_URL']
+            self.supported_models = ["qwen-max", "qwen-plus"]
         else:
             raise ValueError(f"不支持的API类型: {api_type}")
         
-        self.proxy_enabled = config['XAI_PROXY_ENABLED']
+        self.proxy_enabled = config['LLM_PROXY_ENABLED']
         self.proxies = {
-            'http': f"{config['XAI_PROXY_TYPE']}://{config['XAI_PROXY_HOST']}:{config['XAI_PROXY_PORT']}",
-            'https': f"{config['XAI_PROXY_TYPE']}://{config['XAI_PROXY_HOST']}:{config['XAI_PROXY_PORT']}"
+            'http': f"{config['LLM_PROXY_TYPE']}://{config['LLM_PROXY_HOST']}:{config['LLM_PROXY_PORT']}",
+            'https': f"{config['LLM_PROXY_TYPE']}://{config['LLM_PROXY_HOST']}:{config['LLM_PROXY_PORT']}"
         } if self.proxy_enabled else None
         
-        self.timeout = config['XAI_TIMEOUT']
-        self.temperature = config['XAI_TEMPERATURE']
-        self.max_tokens = config['XAI_MAX_TOKENS']
-        self.max_retries = config['XAI_MAX_RETRIES']
-        self.fallback_enabled = config['XAI_FALLBACK_ENABLED']
+        self.timeout = config['LLM_TIMEOUT']
+        self.temperature = config['LLM_TEMPERATURE']
+        self.max_tokens = config['LLM_MAX_TOKENS']
+        self.max_retries = config['LLM_MAX_RETRIES']
+        self.fallback_enabled = config['LLM_FALLBACK_ENABLED']
         
         # 添加缓存机制
         self._cache = {}
         self._cache_ttl = 300  # 5分钟缓存
         self._cache_timestamps = {}
         
-        logger.info(f"XAI初始化 - API: {api_type}, 模型: {model}, 代理: {self.proxy_enabled}")
+        logger.info(f"LLM初始化 - API: {api_type}, 模型: {model}, 代理: {self.proxy_enabled}")
 
     async def _make_async_request(self, endpoint: str, data: Dict[str, Any], model: Optional[str] = None) -> Optional[Dict]:
         """异步发送API请求"""
