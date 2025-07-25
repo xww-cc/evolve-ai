@@ -45,6 +45,10 @@ from models.modular_net import ModularMathReasoningNet
 from utils.visualization import EvolutionVisualizer
 from evolution.stagnation_detector import detect_stagnation
 
+# 导入视觉模块
+from models.vision import VisionEncoder, VisualReasoning, SpatialUnderstanding, VisionEvolution
+from evaluators.vision_evaluator import VisionEvaluator
+
 class PersistentEvolutionManager:
     """持续进化管理器"""
     

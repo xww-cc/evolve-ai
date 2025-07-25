@@ -100,13 +100,6 @@ class SystemStatusChecker:
                     'percent': memory_usage
                 }
             )
-        except ImportError:
-            return ComponentStatus(
-                name='memory',
-                status='warning',
-                message="无法检查内存状态 (psutil未安装)",
-                details={'error': 'psutil not available'}
-            )
         except Exception as e:
             return ComponentStatus(
                 name='memory',
@@ -161,7 +154,7 @@ class SystemStatusChecker:
                     message="GPU不可用，使用CPU模式",
                     details={'available': False}
                 )
-            except Exception as e:
+        except Exception as e:
             return ComponentStatus(
                 name='gpu',
                 status='error',
@@ -260,4 +253,9 @@ system_status_checker = SystemStatusChecker()
 
 def get_system_status_checker():
     """获取系统状态检查器实例"""
-    return system_status_checker 
+    return system_status_checker
+
+if __name__ == "__main__":
+    # 运行系统状态检查
+    checker = get_system_status_checker()
+    checker.print_system_status() 
