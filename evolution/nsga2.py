@@ -195,7 +195,11 @@ async def evolve_population_nsga2(population: List[ModularMathReasoningNet], num
             current_weight_mutation_strength = max(min_mutation_strength_base, current_weight_mutation_strength) 
 
             for param in child.parameters():
-                param.data += torch.randn_like(param.data) * current_weight_mutation_strength
+                with torch.no_grad():
+                    noise = torch.randn_like(param.data) * current_weight_mutation_strength
+                    param.data += noise
+                    # 权重裁剪防止极端值 - 新增
+                    torch.clamp_(param.data, -10.0, 10.0)
             
             offspring_population.append(child)
 

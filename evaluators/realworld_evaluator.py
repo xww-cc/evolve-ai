@@ -99,11 +99,19 @@ class RealWorldEvaluator:
             return 0.1
     
     async def _quick_evaluation(self, model: ModularMathReasoningNet) -> float:
-        """快速评估：基础能力测试"""
+        """快速评估：基础能力测试 - 修复版"""
         try:
             # 测试前向传播
             x = torch.randn(3, 4)
             output = model(x)
+            
+            # 数值稳定性检查 - 新增
+            if torch.any(torch.isnan(output)) or torch.any(torch.isinf(output)):
+                return 0.0  # 惩罚无效输出
+            
+            # 数值范围检查 - 新增
+            if torch.any(torch.abs(output) > 1e6):
+                return 0.0  # 惩罚极端值
             
             # 基础评分
             score = 0.2  # 基础分
@@ -112,20 +120,21 @@ class RealWorldEvaluator:
             if output.shape[1] > 2:
                 score += 0.2
             
-            # 根据输出稳定性评分
+            # 根据输出稳定性评分 - 修复：奖励稳定性而不是不稳定性
             output_std = torch.std(output).item()
-            if output_std > 0.1:
+            if 0.01 < output_std < 10.0:  # 合理的标准差范围
                 score += 0.2
             
-            # 根据输出范围评分
+            # 根据输出范围评分 - 修复：奖励合理范围而不是极端范围
             output_max = torch.max(output).item()
             output_min = torch.min(output).item()
-            if abs(output_max - output_min) > 0.5:
+            output_range = abs(output_max - output_min)
+            if 0.1 < output_range < 100.0:  # 合理的输出范围
                 score += 0.2
             
             # 根据模型复杂度评分
             total_params = sum(p.numel() for p in model.parameters())
-            if total_params > 1000:
+            if 100 < total_params < 10000:  # 合理的参数范围
                 score += 0.2
             
             return min(1.0, score)
@@ -173,7 +182,7 @@ class RealWorldEvaluator:
             return []
     
     async def _solve_task(self, model: ModularMathReasoningNet, task: Dict) -> float:
-        """解决单个任务"""
+        """解决单个任务 - 修复版"""
         try:
             task_type = task['type']
             difficulty = task['difficulty']
@@ -182,37 +191,81 @@ class RealWorldEvaluator:
                 # 基础数学计算测试
                 x = torch.randn(5, 4)
                 output = model(x)
+                
+                # 数值稳定性检查 - 新增
+                if torch.any(torch.isnan(output)) or torch.any(torch.isinf(output)):
+                    return 0.0
+                
+                # 数值范围检查 - 新增
+                if torch.any(torch.abs(output) > 1e6):
+                    return 0.0
+                
                 score = min(1.0, 0.3 + difficulty * 0.7)
                 
             elif task_type == 'pattern_recognition':
                 # 模式识别测试
                 x = torch.randn(10, 4)
                 output = model(x)
-                # 检查输出的变化性
+                
+                # 数值稳定性检查 - 新增
+                if torch.any(torch.isnan(output)) or torch.any(torch.isinf(output)):
+                    return 0.0
+                
+                # 数值范围检查 - 新增
+                if torch.any(torch.abs(output) > 1e6):
+                    return 0.0
+                
+                # 检查输出的变化性 - 修复：奖励合理的变化性
                 output_var = torch.var(output).item()
-                score = min(1.0, 0.4 + difficulty * 0.6 * min(output_var, 1.0))
+                if 0.01 < output_var < 100.0:  # 合理的变化范围
+                    score = min(1.0, 0.4 + difficulty * 0.6 * min(output_var / 100.0, 1.0))
+                else:
+                    score = 0.1  # 惩罚极端变化
                 
             elif task_type == 'logical_reasoning':
                 # 逻辑推理测试
                 x = torch.randn(8, 4)
                 output = model(x)
-                # 检查输出的逻辑性
+                
+                # 数值稳定性检查 - 新增
+                if torch.any(torch.isnan(output)) or torch.any(torch.isinf(output)):
+                    return 0.0
+                
+                # 数值范围检查 - 新增
+                if torch.any(torch.abs(output) > 1e6):
+                    return 0.0
+                
+                # 检查输出的逻辑性 - 修复：奖励合理的逻辑性
                 output_range = torch.max(output).item() - torch.min(output).item()
-                score = min(1.0, 0.5 + difficulty * 0.5 * min(output_range, 1.0))
+                if 0.1 < output_range < 50.0:  # 合理的逻辑范围
+                    score = min(1.0, 0.5 + difficulty * 0.5)
+                else:
+                    score = 0.1  # 惩罚极端逻辑
                 
             elif task_type == 'sequence_prediction':
                 # 序列预测测试
-                x = torch.randn(12, 4)
+                x = torch.randn(6, 4)
                 output = model(x)
-                # 检查输出的连续性
-                output_diff = torch.mean(torch.abs(torch.diff(output, dim=0))).item()
-                score = min(1.0, 0.4 + difficulty * 0.6 * min(output_diff, 1.0))
+                
+                # 数值稳定性检查 - 新增
+                if torch.any(torch.isnan(output)) or torch.any(torch.isinf(output)):
+                    return 0.0
+                
+                # 数值范围检查 - 新增
+                if torch.any(torch.abs(output) > 1e6):
+                    return 0.0
+                
+                # 检查序列的连续性 - 修复：奖励连续性
+                output_diff = torch.diff(output.squeeze())
+                if torch.all(torch.abs(output_diff) < 10.0):  # 合理的连续性
+                    score = min(1.0, 0.4 + difficulty * 0.6)
+                else:
+                    score = 0.1  # 惩罚不连续性
                 
             else:
-                score = 0.3  # 默认分数
+                score = 0.1
             
             return score
             
         except Exception as e:
-            logger.warning(f"任务解决失败: {e}")
             return 0.0

@@ -68,27 +68,35 @@ class SymbolicEvaluator:
                 self.cache_timestamps.pop(key, None)
     
     async def _basic_evaluation(self, model: ModularMathReasoningNet) -> float:
-        """基础评估：快速检查模型能力 - 优化版本"""
+        """基础评估：快速检查模型能力 - 修复版"""
         try:
             # 测试前向传播
             x = torch.randn(2, 4)
             output = model(x)
             
-            # 基础评分 - 改进版本
+            # 数值稳定性检查 - 新增
+            if torch.any(torch.isnan(output)) or torch.any(torch.isinf(output)):
+                return 0.0  # 惩罚无效输出
+            
+            # 数值范围检查 - 新增
+            if torch.any(torch.abs(output) > 1e6):
+                return 0.0  # 惩罚极端值
+            
+            # 基础评分
             score = 0.3  # 基础分
             
             # 根据输出维度加分
             if output.shape[1] > 1:
                 score += 0.2
             
-            # 根据输出稳定性加分
+            # 根据输出稳定性加分 - 修复：奖励稳定性
             output_std = torch.std(output).item()
-            if output_std > 0.01:
+            if 0.01 < output_std < 10.0:  # 合理的标准差范围
                 score += 0.2
             
             # 根据模型复杂度加分
             total_params = sum(p.numel() for p in model.parameters())
-            if total_params > 100:
+            if 100 < total_params < 10000:  # 合理的参数范围
                 score += 0.2
             
             # 根据模块数量加分
@@ -149,14 +157,25 @@ class SymbolicEvaluator:
 
 # 保持向后兼容性
 async def evaluate_symbolic(model: ModularMathReasoningNet, device: str, level: int) -> float:
-    """评估符号推理能力 - 完整"""
+    """评估符号推理能力 - 修复版"""
     try:
+        # 基础数值稳定性检查
+        test_inputs = torch.randn(10, 4).to(device)
+        model_outputs = model(test_inputs)
+        
+        # 数值稳定性检查 - 新增
+        if torch.any(torch.isnan(model_outputs)) or torch.any(torch.isinf(model_outputs)):
+            return 0.0  # 惩罚无效输出
+        
+        # 数值范围检查 - 新增
+        if torch.any(torch.abs(model_outputs) > 1e6):
+            return 0.0  # 惩罚极端值
+        
         # 修复参数调用问题
         symbolic_expr = await model.extract_symbolic(use_llm=True)
         
         if symbolic_expr is not None:
-            test_inputs = torch.randn(10, 4).to(device)
-            model_outputs = model(test_inputs).detach().cpu().numpy()
+            model_outputs = model_outputs.detach().cpu().numpy()
             
             try:
                 if isinstance(symbolic_expr, sp.Matrix):
@@ -174,8 +193,15 @@ async def evaluate_symbolic(model: ModularMathReasoningNet, device: str, level: 
                     if isinstance(sym_outputs, (int, float)):
                         sym_outputs = np.full(10, sym_outputs)
                     
+                    # 数值稳定性检查 - 新增
+                    if np.any(np.isnan(sym_outputs)) or np.any(np.isinf(sym_outputs)):
+                        return 0.0
+                    
+                    if np.any(np.abs(sym_outputs) > 1e6):
+                        return 0.0
+                    
                     mse = np.mean((sym_outputs - model_outputs.flatten())**2)
-                    return -mse * 0.1
+                    return max(-1.0, -mse * 0.1)  # 限制最低分
             except Exception as e:
                 logger.warning(f"符号推理评估失败: {e}")
             

@@ -6,6 +6,7 @@ from integrations.xai_integration import XAIIntegration
 from models.epigenetic import EpigeneticMarkers
 from torch.distributions import Normal
 import asyncio
+import torch
 
 async def mutate_modular_net(modules_config: List[Dict], epigenetic_markers: EpigeneticMarkers, min_sub_modules: int, max_sub_modules: int, min_subnet_width: int, max_subnet_width: int, width_step: int, activation_fns: List[str], base_mutation_rate_structure: float, epigenetic_mutation_rate: float) -> List[Dict]:
     """模块化网络变异 - 完整"""

@@ -230,7 +230,7 @@ class EnhancedFrameworkEvolution:
         print(f"🚀 增强框架融合系统初始化 - 持续进化: {'启用' if enable_persistence else '禁用'}")
     
     def evaluate_population_enhanced(self, population: List[ModularMathReasoningNet], generation: int) -> List[Dict]:
-        """增强的种群评估 - 多维度评估"""
+        """增强的种群评估 - 多维度评估 - 修复版"""
         results = []
         
         for i, model in enumerate(population):
@@ -241,21 +241,47 @@ class EnhancedFrameworkEvolution:
                     model.eval()
                     output = model(test_input)
                 
+                # 数值稳定性检查 - 新增
+                if torch.any(torch.isnan(output)) or torch.any(torch.isinf(output)):
+                    results.append({
+                        'model_id': i,
+                        'base_score': 0.0,
+                        'final_score': 0.0,
+                        'diversity': 0.0,
+                        'stability': 0.0,
+                        'complexity': 0.0,
+                        'output_stats': {'mean': 0.0, 'std': 0.0, 'max': 0.0, 'min': 0.0}
+                    })
+                    continue
+                
+                # 数值范围检查 - 新增
+                if torch.any(torch.abs(output) > 1e6):
+                    results.append({
+                        'model_id': i,
+                        'base_score': 0.0,
+                        'final_score': 0.0,
+                        'diversity': 0.0,
+                        'stability': 0.0,
+                        'complexity': 0.0,
+                        'output_stats': {'mean': 0.0, 'std': 0.0, 'max': 0.0, 'min': 0.0}
+                    })
+                    continue
+                
                 # 多维度评估指标
                 output_mean = torch.mean(output).item()
                 output_std = torch.std(output).item()
                 output_max = torch.max(output).item()
                 output_min = torch.min(output).item()
                 
-                # 计算多样性指标
-                diversity_score = abs(output_max - output_min)
-                stability_score = 1.0 / (1.0 + abs(output_std))
-                complexity_score = abs(output_mean) * output_std
+                # 计算多样性指标 - 修复：限制在合理范围内
+                diversity_score = min(10.0, abs(output_max - output_min))
+                stability_score = 1.0 / (1.0 + min(output_std, 10.0))
+                complexity_score = min(1.0, abs(output_mean) * min(output_std, 10.0))
                 
-                # 综合评分
-                base_score = (abs(output_mean) * 0.3 + 
-                             output_std * 0.3 + 
-                             diversity_score * 0.4)
+                # 综合评分 - 修复：奖励合理值而不是极端值
+                base_score = (min(1.0, abs(output_mean)) * 0.3 + 
+                             min(1.0, output_std) * 0.3 + 
+                             min(1.0, diversity_score / 10.0) * 0.4)
                 
                 # 根据代数调整评分（模拟进化压力）
                 generation_bonus = min(generation * 0.05, 0.2)
@@ -283,10 +309,10 @@ class EnhancedFrameworkEvolution:
                 # 返回最低分数
                 results.append({
                     'model_id': i,
-                    'base_score': 0.1,
-                    'final_score': 0.1,
+                    'base_score': 0.0,
+                    'final_score': 0.0,
                     'diversity': 0.0,
-                    'stability': 0.1,
+                    'stability': 0.0,
                     'complexity': 0.0,
                     'output_stats': {'mean': 0.0, 'std': 0.0, 'max': 0.0, 'min': 0.0}
                 })
@@ -338,8 +364,13 @@ class EnhancedFrameworkEvolution:
                     print(f"  生成结构变异个体")
                 else:
                     # 权重变异
-                    self._weight_mutation(child, strength=0.1)
                     print(f"  生成权重变异个体")
+                    for param in child.parameters():
+                        with torch.no_grad():
+                            noise = torch.randn_like(param.data) * 0.1
+                            param.data += noise
+                            # 权重裁剪防止极端值 - 新增
+                            torch.clamp_(param.data, -10.0, 10.0)
             else:
                 # 交叉操作
                 self._crossover_operation(child, parent1, parent2)
