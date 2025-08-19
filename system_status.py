@@ -161,7 +161,7 @@ class SystemStatusChecker:
                     message="GPU不可用，使用CPU模式",
                     details={'available': False}
                 )
-            except Exception as e:
+        except Exception as e:
             return ComponentStatus(
                 name='gpu',
                 status='error',
